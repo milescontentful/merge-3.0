@@ -1,0 +1,56 @@
+{
+  "functions": [
+    {
+      "id": "aiMergeSummary",
+      "name": "AI Merge Summary",
+      "description": "Invokes the 'Suggest merge summary' AI Action with a merge diff digest and returns the summary text",
+      "path": "functions/aiMergeSummary.js",
+      "entryFile": "./functions/aiMergeSummary.ts",
+      "accepts": [
+        "appaction.call"
+      ]
+    }
+  ],
+  "actions": [
+    {
+      "id": "aiMergeSummary",
+      "name": "AI Merge Summary",
+      "description": "Summarize a pending environment merge via the 'Suggest merge summary' AI Action",
+      "type": "function-invocation",
+      "functionId": "aiMergeSummary",
+      "category": "Custom",
+      "parameters": [
+        {
+          "id": "digest",
+          "name": "Changes digest",
+          "type": "Symbol",
+          "required": true
+        },
+        {
+          "id": "entryId",
+          "name": "Entry ID",
+          "type": "Symbol",
+          "required": true
+        },
+        {
+          "id": "entryPath",
+          "name": "Entry field path",
+          "type": "Symbol",
+          "required": true
+        },
+        {
+          "id": "sourceEnvironment",
+          "name": "Source environment",
+          "type": "Symbol",
+          "required": true
+        },
+        {
+          "id": "targetEnvironment",
+          "name": "Target environment",
+          "type": "Symbol",
+          "required": true
+        }
+      ]
+    }
+  ]
+}

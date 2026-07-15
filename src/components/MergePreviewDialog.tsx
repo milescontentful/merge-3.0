@@ -77,15 +77,25 @@ export const MergePreviewDialog: React.FC<MergePreviewDialogProps> = ({
   const creates = changes.filter(c => c.changeType === 'add');
   const updates = changes.filter(c => c.changeType === 'update');
 
-  // AI "what changed" summary (optional — needs an Anthropic key in app config)
-  const anthropicApiKey: string | undefined = parameters?.anthropicApiKey;
+  // AI "what changed" summary — App Action → App Function → AI Action, all inside Contentful
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [summarizing, setSummarizing] = useState(false);
   const handleSummarize = async () => {
-    if (!anthropicApiKey) return;
+    if (!cma) return;
     setSummarizing(true);
     try {
-      setAiSummary(await summarizeChanges(anthropicApiKey, changes, sourceEnv, targetEnv));
+      setAiSummary(
+        await summarizeChanges(
+          cma,
+          sdk.ids.app!,
+          sdk.ids.space,
+          sdk.ids.environment,
+          (parameters?.entryId as string) || changes[0]?.id,
+          changes,
+          sourceEnv,
+          targetEnv
+        )
+      );
     } catch (err: any) {
       console.error('AI summary failed:', err);
       sdk.notifier.error(`AI summary failed: ${err.message}`);
@@ -536,7 +546,7 @@ export const MergePreviewDialog: React.FC<MergePreviewDialogProps> = ({
             <Text fontWeight="fontWeightDemiBold" fontSize="fontSizeS">What's changing</Text>
             <Text fontSize="fontSizeS">{aiSummary || buildBasicSummary(changes)}</Text>
           </Flex>
-          {anthropicApiKey && !aiSummary && (
+          {!aiSummary && (
             <Button size="small" variant="secondary" onClick={handleSummarize} isDisabled={summarizing}>
               {summarizing ? 'Summarizing…' : '✨ Summarize with AI'}
             </Button>

@@ -1,13 +1,15 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { PlainClientAPI } from 'contentful-management';
 import { ChangeItem } from '../types';
 
 /**
- * Builds a compact digest of the merge diff and asks Claude for a
- * plain-English "what changed" summary. Runs client-side with the
- * (optional) Anthropic API key from the app configuration.
+ * "What changed" summaries for the merge preview.
+ *
+ * The AI path calls the app's "aiMergeSummary" App Action → a Contentful-
+ * hosted App Function → the "Suggest merge summary" AI Action. Everything
+ * runs inside Contentful — no external API keys.
  */
 
-// Deterministic fallback shown when no API key is configured.
+// Deterministic fallback, always available.
 export function buildBasicSummary(changes: ChangeItem[]): string {
   const creates = changes.filter((c) => c.changeType === 'add');
   const updates = changes.filter((c) => c.changeType === 'update');
@@ -31,56 +33,67 @@ export function buildBasicSummary(changes: ChangeItem[]): string {
   return parts.join(' · ');
 }
 
-// Compact, token-bounded digest of the diff for the model.
+// Compact digest of the diff for the AI Action.
 function buildDiffDigest(changes: ChangeItem[]): string {
   const truncate = (v: any) => {
     const s = typeof v === 'string' ? v : JSON.stringify(v);
-    return s && s.length > 200 ? s.slice(0, 200) + '…' : s;
+    return s && s.length > 150 ? s.slice(0, 150) + '…' : s;
   };
 
   const lines: string[] = [];
-  for (const item of changes.slice(0, 40)) {
+  for (const item of changes.slice(0, 30)) {
     lines.push(`${item.changeType === 'add' ? 'NEW' : 'UPDATE'} ${item.type} "${item.title || item.id}" (${item.contentType || 'asset'})`);
     if (item.changeType === 'update') {
       const source = item.sourceData?.fields || {};
       const target = item.targetData?.fields || {};
       for (const field of new Set([...Object.keys(source), ...Object.keys(target)])) {
-        const from = JSON.stringify(target[field]);
-        const to = JSON.stringify(source[field]);
-        if (from !== to) {
+        if (JSON.stringify(target[field]) !== JSON.stringify(source[field])) {
           lines.push(`  field "${field}": ${truncate(target[field]) ?? '(empty)'} -> ${truncate(source[field]) ?? '(empty)'}`);
         }
       }
     }
   }
-  if (changes.length > 40) lines.push(`…and ${changes.length - 40} more items`);
+  if (changes.length > 30) lines.push(`…and ${changes.length - 30} more items`);
   return lines.join('\n');
 }
 
+// Suggestion AI Actions anchor to a real entry field — find one on the root entry.
+function findEntryPath(changes: ChangeItem[], entryId: string): string | null {
+  const item = changes.find((c) => c.id === entryId) || changes[0];
+  const fields = item?.sourceData?.fields;
+  if (!fields) return null;
+  const fieldName = Object.keys(fields)[0];
+  const locale = fieldName && Object.keys(fields[fieldName] || {})[0];
+  return fieldName && locale ? `fields.${fieldName}.${locale}` : null;
+}
+
 export async function summarizeChanges(
-  apiKey: string,
+  cma: PlainClientAPI,
+  appDefinitionId: string,
+  spaceId: string,
+  environmentId: string,
+  entryId: string,
   changes: ChangeItem[],
   sourceEnv: string,
   targetEnv: string
 ): Promise<string> {
-  const client = new Anthropic({
-    apiKey,
-    dangerouslyAllowBrowser: true, // key is user-supplied app config; app runs entirely in-browser
-  });
+  const entryPath = findEntryPath(changes, entryId);
+  if (!entryPath) throw new Error('Could not determine an entry field to anchor the summary to');
 
-  const response = await client.messages.create({
-    model: 'claude-opus-4-8',
-    max_tokens: 1024,
-    system:
-      'You summarize Contentful content-merge previews for editors. Be concise and concrete: what is being added, what is being overwritten, and anything risky (large overwrites, emptied fields, many items). Plain prose, no headers, 2-5 sentences.',
-    messages: [
-      {
-        role: 'user',
-        content: `Merging from environment "${sourceEnv}" to "${targetEnv}". Diff digest (target value -> source value for updated fields):\n\n${buildDiffDigest(changes)}`,
+  const call = await cma.appActionCall.createWithResponse(
+    { spaceId, environmentId, appDefinitionId, appActionId: 'aiMergeSummary' },
+    {
+      parameters: {
+        digest: buildDiffDigest(changes),
+        entryId,
+        entryPath,
+        sourceEnvironment: sourceEnv,
+        targetEnvironment: targetEnv,
       },
-    ],
-  });
+    }
+  );
 
-  const block = response.content.find((b) => b.type === 'text');
-  return block && block.type === 'text' ? block.text : 'No summary generated.';
+  const body = typeof call.response.body === 'string' ? JSON.parse(call.response.body) : call.response.body;
+  if (!body?.ok) throw new Error(body?.error || 'AI summary failed');
+  return body.summary;
 }

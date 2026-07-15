@@ -179,7 +179,7 @@ const Sidebar = () => {
           environments: environments, // Pass environments list
           missingContentTypes: missing, // Pass missing content types
           cmaToken: parameters?.cmaToken, // Pass CMA token for re-checking
-          anthropicApiKey: parameters?.anthropicApiKey, // For the AI summary
+          entryId: sdk.ids.entry, // Root entry — anchors the AI summary suggestion
           entryTitle: sdk.entry.fields.internalName?.getValue()?.toString() || 
                       sdk.entry.fields.title?.getValue()?.toString() || 
                       sdk.entry.fields.name?.getValue()?.toString() || 

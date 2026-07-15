@@ -2,7 +2,6 @@ import { Entry, Asset, Link } from 'contentful-management';
 
 export interface AppInstallationParameters {
   cmaToken?: string;
-  anthropicApiKey?: string; // optional — enables the AI merge summary
   defaultSourceEnvironment?: string;
   defaultTargetEnvironment?: string;
   autoPublish?: boolean;

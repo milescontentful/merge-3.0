@@ -121,21 +121,6 @@ const ConfigScreen = () => {
           </FormControl.HelpText>
         </FormControl>
 
-        <FormControl>
-          <FormControl.Label>Anthropic API Key (optional)</FormControl.Label>
-          <TextInput
-            type="password"
-            value={parameters.anthropicApiKey || ''}
-            onChange={(e) =>
-              setParameters({ ...parameters, anthropicApiKey: e.target.value })
-            }
-          />
-          <FormControl.HelpText>
-            Enables the AI "what changed" summary in the merge preview. Leave
-            blank to use the built-in summary instead.
-          </FormControl.HelpText>
-        </FormControl>
-
         {loadingEnvironments ? (
           <Box style={{ textAlign: 'center', padding: '20px 0' }}>
             <Spinner />

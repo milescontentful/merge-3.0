@@ -1,5 +1,16 @@
 # Changelog
 
+## [3.2.0] - 2026-07-14
+
+### 🤖 Contentful-native AI summary
+
+- **AI summary now runs entirely inside Contentful** — App Action → Contentful-hosted App Function → AI Action ("Suggest merge summary", Suggestion output). No Anthropic API key, no external hosting.
+- The AI Action is auto-created and published in the space on first use; suggestions anchor to the entry being merged
+- Removed the `@anthropic-ai/sdk` dependency and the Anthropic API key config field
+- Added `contentful-app-manifest.json` (function + app action definitions) and non-interactive build/upsert scripts
+
+---
+
 ## [3.1.0] - 2026-07-14
 
 ### ✨ Feature Release

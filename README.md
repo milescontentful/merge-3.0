@@ -13,7 +13,7 @@ Everything runs client-side against the CMA (rate-limited to 18 req/s), using a 
 3. Detects content types missing in the target
 4. Opens a full-page preview: side-by-side FROM/TO field diff, environment pickers (with inline create/delete), and an option to copy missing content types
 5. Conflicting fields are click-to-resolve: choose per field whether the FROM value merges or the TO value is kept
-6. A "what's changing" summary sits above the diff — with an Anthropic API key configured, the ✨ AI summary explains the merge in plain English
+6. A "what's changing" summary sits above the diff — the ✨ AI summary explains the merge in plain English via a Contentful AI Action (no external keys)
 7. On confirm: copies content types if requested, then merges assets first, entries second — with live progress
 
 ### Merge Later (entry sidebar → "Merge Later")
@@ -64,7 +64,6 @@ npm run upload
 
 1. **Settings → Apps → Custom Apps** → install/configure the app
 2. Enter your **CMA token** and (optionally) default source/target environments
-3. Optionally add an **Anthropic API key** to enable the AI merge summary
 
 ### ⚠️ Critical: enable the sidebar per content type
 
@@ -88,6 +87,19 @@ src/
   utils/         environmentHelpers (env + alias merging), rateLimiter
   types/         shared interfaces
 ```
+
+## AI merge summary (App Function + AI Action)
+
+The ✨ Summarize button in the merge preview runs entirely inside Contentful:
+
+```
+Preview dialog → App Action "aiMergeSummary" → App Function (Contentful-hosted)
+              → AI Action "Suggest merge summary" (Suggestion output) → summary
+```
+
+- The **App Function** (`functions/aiMergeSummary.ts`) is bundled with the app and runs with App Identity — no tokens to configure.
+- The **AI Action** is auto-created and published in the space on first use (`Suggestion` output type, anchored to the entry being merged, so it also surfaces in the entry sidebar's AI suggestions).
+- Rebuild + redeploy with `npm run build && npm run upload` (functions are bundled from `contentful-app-manifest.json`); `npm run upsert-actions` syncs the App Action definition.
 
 ## Notes & limitations
 
