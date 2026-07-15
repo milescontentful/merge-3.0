@@ -1,5 +1,6 @@
 import { FunctionTypeEnum } from '@contentful/node-apps-toolkit';
 import type { AppActionRequest, FunctionEventHandler } from '@contentful/node-apps-toolkit';
+import { makeCmaFetch } from './lib';
 
 /**
  * App Function (Contentful-hosted) behind the "aiMergeSummary" App Action.
@@ -16,7 +17,6 @@ import type { AppActionRequest, FunctionEventHandler } from '@contentful/node-ap
  */
 
 const AI_ACTION_NAME = 'Suggest merge summary';
-const CMA_BASE = 'https://api.contentful.com';
 
 // Payload used to auto-create the AI Action on first use in a space.
 const AI_ACTION_DEFINITION = {
@@ -59,26 +59,6 @@ type Params = {
   sourceEnvironment: string;
   targetEnvironment: string;
 };
-
-// Minimal CMA REST helper on fetch — keeps the bundle free of heavy SDK imports.
-function makeCmaFetch(token: string) {
-  return async (method: string, path: string, body?: unknown, headers: Record<string, string> = {}) => {
-    const res = await fetch(`${CMA_BASE}${path}`, {
-      method,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/vnd.contentful.management.v1+json',
-        ...headers,
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-    if (!res.ok) {
-      const text = (await res.text()).slice(0, 300);
-      throw new Error(`${method} ${path} → ${res.status}: ${text}`);
-    }
-    return res.json() as Promise<any>;
-  };
-}
 
 export const handler: FunctionEventHandler<FunctionTypeEnum.AppActionCall> = async (event, context) => {
   const { body } = event as AppActionRequest<'Custom', Params>;

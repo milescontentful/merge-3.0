@@ -16,6 +16,14 @@ Everything runs client-side against the CMA (rate-limited to 18 req/s), using a 
 6. A "what's changing" summary sits above the diff — the ✨ AI summary explains the merge in plain English via a Contentful AI Action (no external keys)
 7. On confirm: copies content types if requested, then merges assets first, entries second — with live progress
 
+### Compare & Merge (Page app → first tab)
+
+The management hub: diff **everything** — content types, entries, and assets — between any source environment and any target environment **in any space** your token can reach (like Contentful's official Merge app, but not limited to content types). Search the diff, select what to move, and merge as drafts. Content types are copied first, then assets, then entries.
+
+### Bulk "Add to Merge Queue" (content list toolbar)
+
+Select any number of entries in Contentful's content list and use the **Add to Merge Queue** bulk action (an `Entries.v1.0` App Action, next to Run AI Action). All selected entries land in the merge queue via a Contentful-hosted App Function.
+
 ### Merge Later (entry sidebar → "Merge Later")
 
 Adds the entry + its dependency IDs to a **merge queue** persisted in a dedicated `mergeQueueData` entry (auto-created, with optimistic locking so concurrent users can't clobber each other). The **Merge Queue page** (app Page location) lets you search/filter the queue, expand items to inspect and select dependencies, create/delete environments, and merge items individually or in bulk. Queue merges are additive only — anything already in the target is skipped, never overwritten.
@@ -27,7 +35,7 @@ Adds the entry + its dependency IDs to a **merge queue** persisted in a dedicate
 | App config | `ConfigScreen` | CMA token + default source/target environments |
 | Entry sidebar | `Sidebar` | View Diff (merge now) and Merge Later actions |
 | Dialog | `Dialog` → `MergePreviewDialog` | Full-page merge preview |
-| Page | `Page` | Merge queue management |
+| Page | `Page` | Management hub: Compare & Merge (cross-space) + Merge Queue |
 
 ## Quick install
 
@@ -79,7 +87,7 @@ This is Contentful-by-design and the most commonly missed step.
 
 ```
 src/
-  locations/     ConfigScreen, Sidebar, Dialog, Page (merge queue)
+  locations/     ConfigScreen, Sidebar, Dialog, Page (tabs: EnvironmentCompare + MergeQueue)
   components/    MergePreviewDialog, ProgressTracker, LocalhostWarning
   services/      dependencyResolver, conflictDetector, mergeExecutor,
                  contentTypeMigrator, queueService, aiSummarizer

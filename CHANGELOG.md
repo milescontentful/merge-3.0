@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.3.0] - 2026-07-14
+
+### 🗂 The management hub
+
+- **Compare & Merge page** — new first tab on the Page location: full diff of content types + entries + assets between any source environment and any target space/environment (cross-space!). Search, select, merge as drafts. Content types copy first, then assets and entries via the merge executor.
+- **Bulk "Add to Merge Queue"** — an `Entries.v1.0` App Action in the content list's bulk-selection toolbar (next to Run AI Action), backed by a Contentful-hosted App Function that writes to the same optimistically-locked queue as the app. This completes what the abandoned pre-3.0 bulk-actions scaffolding started.
+- Merge Queue moved to the second tab of the Page location (unchanged otherwise)
+
+---
+
 ## [3.2.2] - 2026-07-14
 
 ### 🐛 AI summary 403 fix

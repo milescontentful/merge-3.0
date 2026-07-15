@@ -9,6 +9,16 @@
       "accepts": [
         "appaction.call"
       ]
+    },
+    {
+      "id": "bulkMergeQueue",
+      "name": "Bulk Merge Queue",
+      "description": "Adds all selected entries from the content list to the Merge 3.0 queue",
+      "path": "functions/bulkMergeQueue.js",
+      "entryFile": "./functions/bulkMergeQueue.ts",
+      "accepts": [
+        "appaction.call"
+      ]
     }
   ],
   "actions": [
@@ -51,6 +61,14 @@
           "required": true
         }
       ]
+    },
+    {
+      "id": "bulkAddToQueue",
+      "name": "Add to Merge Queue",
+      "description": "Add the selected entries to the Merge 3.0 merge queue",
+      "type": "function-invocation",
+      "functionId": "bulkMergeQueue",
+      "category": "Entries.v1.0"
     }
   ]
 }
