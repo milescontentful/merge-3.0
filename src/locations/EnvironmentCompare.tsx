@@ -129,6 +129,8 @@ const EnvironmentCompare = () => {
   const [truncated, setTruncated] = useState(false);
   const [comparing, setComparing] = useState(false);
   const [search, setSearch] = useState('');
+  const [kindFilter, setKindFilter] = useState<'all' | Kind>('all');
+  const [changeFilter, setChangeFilter] = useState<'all' | 'add' | 'update'>('all');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [progress, setProgress] = useState<MergeProgress | null>(null);
   const [merging, setMerging] = useState(false);
@@ -268,18 +270,18 @@ const EnvironmentCompare = () => {
   const visible = useMemo(() => {
     if (!diff) return [];
     const q = search.trim().toLowerCase();
-    const filtered = q
-      ? diff.filter(
-          (i) =>
-            i.title.toLowerCase().includes(q) ||
-            i.id.toLowerCase().includes(q) ||
-            (i.contentType || '').toLowerCase().includes(q)
-        )
-      : diff;
-    return [...filtered].sort(
-      (a, b) => SECTION_META[a.kind].order - SECTION_META[b.kind].order || a.title.localeCompare(b.title)
-    );
-  }, [diff, search]);
+    return diff
+      .filter((i) => kindFilter === 'all' || i.kind === kindFilter)
+      .filter((i) => changeFilter === 'all' || i.changeType === changeFilter)
+      .filter(
+        (i) =>
+          !q ||
+          i.title.toLowerCase().includes(q) ||
+          i.id.toLowerCase().includes(q) ||
+          (i.contentType || '').toLowerCase().includes(q)
+      )
+      .sort((a, b) => SECTION_META[a.kind].order - SECTION_META[b.kind].order || a.title.localeCompare(b.title));
+  }, [diff, search, kindFilter, changeFilter]);
 
   const toggle = (key: string) =>
     setSelected((prev) => {
@@ -288,18 +290,6 @@ const EnvironmentCompare = () => {
       return next;
     });
 
-  const toggleSection = (kind: Kind) => {
-    if (!diff) return;
-    const keys = diff.filter((i) => i.kind === kind).map((i) => `${i.kind}:${i.id}`);
-    const allOn = keys.every((k) => selected.has(k));
-    setSelected((prev) => {
-      const next = new Set(prev);
-      keys.forEach((k) => (allOn ? next.delete(k) : next.add(k)));
-      return next;
-    });
-  };
-
-  const sections: Kind[] = ['contentType', 'entry', 'asset'];
 
   return (
     <Box padding="spacingL">
@@ -390,68 +380,104 @@ const EnvironmentCompare = () => {
           {diff.length === 0 ? (
             <Note variant="positive">Environments are identical — nothing to merge.</Note>
           ) : (
-            sections.map((kind) => {
-              const rows = visible.filter((i) => i.kind === kind);
-              const all = diff.filter((i) => i.kind === kind);
-              if (all.length === 0) return null;
-              const keys = all.map((i) => `${i.kind}:${i.id}`);
-              const allOn = keys.every((k) => selected.has(k));
-              return (
-                <Box key={kind} marginBottom="spacingL">
-                  <Table>
-                    <Table.Head>
-                      <Table.Row>
-                        <Table.Cell style={{ width: 40 }}>
-                          <Checkbox isChecked={allOn} onChange={() => toggleSection(kind)} />
-                        </Table.Cell>
-                        <Table.Cell>
-                          <Text fontWeight="fontWeightDemiBold">
-                            {SECTION_META[kind].label} ({all.length})
-                          </Text>
-                        </Table.Cell>
-                        <Table.Cell style={{ width: 180 }}>ID</Table.Cell>
-                        <Table.Cell style={{ width: 160 }}>Content type</Table.Cell>
-                        <Table.Cell style={{ width: 100 }}>Change</Table.Cell>
-                      </Table.Row>
-                    </Table.Head>
-                    <Table.Body>
-                      {rows.length === 0 ? (
-                        <Table.Row>
-                          <Table.Cell colSpan={5}>
-                            <Text fontColor="gray500">No matches for "{search}"</Text>
+            <>
+              {/* Kind + change filters */}
+              <Flex gap="spacingS" alignItems="center" marginBottom="spacingM">
+                <Flex gap="spacing2Xs">
+                  {(['all', 'contentType', 'entry', 'asset'] as const).map((k) => {
+                    const count = k === 'all' ? diff.length : diff.filter((i) => i.kind === k).length;
+                    return (
+                      <Button
+                        key={k}
+                        size="small"
+                        variant={kindFilter === k ? 'primary' : 'secondary'}
+                        onClick={() => setKindFilter(k)}
+                      >
+                        {k === 'all' ? 'Everything' : SECTION_META[k].label} ({count})
+                      </Button>
+                    );
+                  })}
+                </Flex>
+                <Select
+                  value={changeFilter}
+                  onChange={(e) => setChangeFilter(e.target.value as any)}
+                  size="small"
+                  style={{ width: 150 }}
+                >
+                  <Select.Option value="all">New + Changed</Select.Option>
+                  <Select.Option value="add">New only</Select.Option>
+                  <Select.Option value="update">Changed only</Select.Option>
+                </Select>
+              </Flex>
+
+              <Table>
+                <Table.Head>
+                  <Table.Row>
+                    <Table.Cell style={{ width: 40 }}>
+                      <Checkbox
+                        isChecked={visible.length > 0 && visible.every((i) => selected.has(`${i.kind}:${i.id}`))}
+                        onChange={() => {
+                          const keys = visible.map((i) => `${i.kind}:${i.id}`);
+                          const allOn = keys.every((k) => selected.has(k));
+                          setSelected((prev) => {
+                            const next = new Set(prev);
+                            keys.forEach((k) => (allOn ? next.delete(k) : next.add(k)));
+                            return next;
+                          });
+                        }}
+                      />
+                    </Table.Cell>
+                    <Table.Cell>Title</Table.Cell>
+                    <Table.Cell style={{ width: 140 }}>Kind</Table.Cell>
+                    <Table.Cell style={{ width: 160 }}>Content type</Table.Cell>
+                    <Table.Cell style={{ width: 200 }}>ID</Table.Cell>
+                    <Table.Cell style={{ width: 100 }}>Change</Table.Cell>
+                  </Table.Row>
+                </Table.Head>
+                <Table.Body>
+                  {visible.length === 0 ? (
+                    <Table.Row>
+                      <Table.Cell colSpan={6}>
+                        <Text fontColor="gray500">No items match the current filters</Text>
+                      </Table.Cell>
+                    </Table.Row>
+                  ) : (
+                    visible.map((item) => {
+                      const key = `${item.kind}:${item.id}`;
+                      return (
+                        <Table.Row key={key}>
+                          <Table.Cell>
+                            <Checkbox isChecked={selected.has(key)} onChange={() => toggle(key)} />
+                          </Table.Cell>
+                          <Table.Cell>
+                            <Text fontWeight="fontWeightMedium">{item.title}</Text>
+                          </Table.Cell>
+                          <Table.Cell>
+                            <Badge
+                              variant={item.kind === 'contentType' ? 'primary' : item.kind === 'entry' ? 'secondary' : 'featured'}
+                              size="small"
+                            >
+                              {item.kind === 'contentType' ? 'Content type' : item.kind === 'entry' ? 'Entry' : 'Asset'}
+                            </Badge>
+                          </Table.Cell>
+                          <Table.Cell>
+                            <Text fontSize="fontSizeS" fontColor="gray600">{item.contentType || '—'}</Text>
+                          </Table.Cell>
+                          <Table.Cell>
+                            <Text fontSize="fontSizeS" fontColor="gray600">{item.id}</Text>
+                          </Table.Cell>
+                          <Table.Cell>
+                            <Badge variant={item.changeType === 'add' ? 'positive' : 'warning'} size="small">
+                              {item.changeType === 'add' ? 'New' : 'Changed'}
+                            </Badge>
                           </Table.Cell>
                         </Table.Row>
-                      ) : (
-                        rows.map((item) => {
-                          const key = `${item.kind}:${item.id}`;
-                          return (
-                            <Table.Row key={key}>
-                              <Table.Cell>
-                                <Checkbox isChecked={selected.has(key)} onChange={() => toggle(key)} />
-                              </Table.Cell>
-                              <Table.Cell>
-                                <Text fontWeight="fontWeightMedium">{item.title}</Text>
-                              </Table.Cell>
-                              <Table.Cell>
-                                <Text fontSize="fontSizeS" fontColor="gray600">{item.id}</Text>
-                              </Table.Cell>
-                              <Table.Cell>
-                                <Text fontSize="fontSizeS" fontColor="gray600">{item.contentType || '—'}</Text>
-                              </Table.Cell>
-                              <Table.Cell>
-                                <Badge variant={item.changeType === 'add' ? 'positive' : 'warning'} size="small">
-                                  {item.changeType === 'add' ? 'New' : 'Changed'}
-                                </Badge>
-                              </Table.Cell>
-                            </Table.Row>
-                          );
-                        })
-                      )}
-                    </Table.Body>
-                  </Table>
-                </Box>
-              );
-            })
+                      );
+                    })
+                  )}
+                </Table.Body>
+              </Table>
+            </>
           )}
         </>
       )}

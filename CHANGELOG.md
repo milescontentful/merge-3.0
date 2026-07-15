@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.3.1] - 2026-07-14
+
+### ✨ Queue AI summary + Compare UX
+
+- **"✨ Summarize queue"** on the Merge Queue tab — high-level AI review of everything queued (what's moving, where, anything risky) via the same App Function → AI Action pipeline
+- **Compare & Merge filters** — kind pills (Everything / Content Types / Entries / Assets, with counts), a New/Changed filter, and a unified table with a Kind column; select-all follows the active filters
+
+---
+
 ## [3.3.0] - 2026-07-14
 
 ### 🗂 The management hub

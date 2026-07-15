@@ -27,6 +27,7 @@ import { MergeExecutor } from '../services/mergeExecutor';
 import { ContentTypeMigrator } from '../services/contentTypeMigrator';
 import ProgressTracker from '../components/ProgressTracker';
 import { getEnvironmentsWithAliases, EnvironmentWithAlias } from '../utils/environmentHelpers';
+import { summarizeDigest } from '../services/aiSummarizer';
 
 const MergeQueue = () => {
   
@@ -42,6 +43,8 @@ const MergeQueue = () => {
   
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState('');
+  const [queueSummary, setQueueSummary] = useState<string | null>(null);
+  const [summarizingQueue, setSummarizingQueue] = useState(false);
   const [filterContentType, setFilterContentType] = useState('all');
   const [filterEnvironment, setFilterEnvironment] = useState('all');
   
@@ -1179,6 +1182,49 @@ const MergeQueue = () => {
     );
   }
 
+  // High-level AI summary of everything sitting in the queue
+  const handleSummarizeQueue = async () => {
+    if (!cma || queueItems.length === 0) return;
+    setSummarizingQueue(true);
+    try {
+      const digest = queueItems
+        .map(
+          (i) =>
+            `QUEUED Entry "${i.entryTitle}" (${i.contentType}) ${i.sourceEnv} -> ${i.targetEnv || 'target not set'}${i.dependencyCount ? `, ~${i.dependencyCount} dependencies` : ''}`
+        )
+        .join('\n');
+      // Anchor the suggestion to the first queued entry that exists here
+      const anchor = queueItems[0];
+      const entry = await cma.entry.get({
+        spaceId: sdk.ids.space,
+        environmentId: sdk.ids.environment,
+        entryId: anchor.entryId,
+      });
+      const fieldName = Object.keys(entry.fields || {})[0];
+      const locale = fieldName && Object.keys(entry.fields[fieldName])[0];
+      if (!fieldName || !locale) throw new Error('Could not anchor the summary to a queued entry');
+      const targets = [...new Set(queueItems.map((i) => i.targetEnv).filter(Boolean))];
+      setQueueSummary(
+        await summarizeDigest(
+          cma,
+          sdk.ids.app!,
+          sdk.ids.space,
+          sdk.ids.environment,
+          anchor.entryId,
+          `fields.${fieldName}.${locale}`,
+          `This is a MERGE QUEUE review (items queued for later merging, dependencies resolved at merge time):\n${digest}`,
+          sdk.ids.environment,
+          targets.join(', ') || 'not set'
+        )
+      );
+    } catch (err: any) {
+      console.error('Queue summary failed:', err);
+      sdk.notifier.error(`Queue summary failed: ${err.message}`);
+    } finally {
+      setSummarizingQueue(false);
+    }
+  };
+
   return (
     <Box padding="spacingXl">
       {/* Header Section */}
@@ -1187,12 +1233,28 @@ const MergeQueue = () => {
         <Text fontSize="fontSizeM" fontColor="gray600">
           {filteredItems.length} of {queueItems.length} {queueItems.length === 1 ? 'item' : 'items'}
         </Text>
-        {hasSelections() && (
-          <Badge variant="primary">
-            {getSelectionCount()} selected
-          </Badge>
-        )}
+        <Flex gap="spacingS" alignItems="center">
+          {hasSelections() && (
+            <Badge variant="primary">
+              {getSelectionCount()} selected
+            </Badge>
+          )}
+          {queueItems.length > 0 && !queueSummary && (
+            <Button size="small" variant="secondary" onClick={handleSummarizeQueue} isDisabled={summarizingQueue} isLoading={summarizingQueue}>
+              ✨ Summarize queue
+            </Button>
+          )}
+        </Flex>
       </Flex>
+
+      {queueSummary && (
+        <Note variant="neutral" style={{ marginBottom: '16px' }}>
+          <Flex flexDirection="column" gap="spacingXs">
+            <Text fontWeight="fontWeightDemiBold" fontSize="fontSizeS">Queue at a glance</Text>
+            <Text fontSize="fontSizeS">{queueSummary}</Text>
+          </Flex>
+        </Note>
+      )}
 
       {/* Search & Filter Section */}
       {queueItems.length > 0 && (

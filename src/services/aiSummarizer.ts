@@ -67,6 +67,36 @@ function findEntryPath(changes: ChangeItem[], entryId: string): string | null {
   return fieldName && locale ? `fields.${fieldName}.${locale}` : null;
 }
 
+// Low-level: send any digest through the app action → function → AI Action chain.
+export async function summarizeDigest(
+  cma: PlainClientAPI,
+  appDefinitionId: string,
+  spaceId: string,
+  environmentId: string,
+  entryId: string,
+  entryPath: string,
+  digest: string,
+  sourceEnv: string,
+  targetEnv: string
+): Promise<string> {
+  const call = await cma.appActionCall.createWithResponse(
+    { spaceId, environmentId, appDefinitionId, appActionId: 'aiMergeSummary' },
+    {
+      parameters: {
+        digest,
+        entryId,
+        entryPath,
+        sourceEnvironment: sourceEnv,
+        targetEnvironment: targetEnv,
+      },
+    }
+  );
+
+  const body = typeof call.response.body === 'string' ? JSON.parse(call.response.body) : call.response.body;
+  if (!body?.ok) throw new Error(body?.error || 'AI summary failed');
+  return body.summary;
+}
+
 export async function summarizeChanges(
   cma: PlainClientAPI,
   appDefinitionId: string,
@@ -79,21 +109,5 @@ export async function summarizeChanges(
 ): Promise<string> {
   const entryPath = findEntryPath(changes, entryId);
   if (!entryPath) throw new Error('Could not determine an entry field to anchor the summary to');
-
-  const call = await cma.appActionCall.createWithResponse(
-    { spaceId, environmentId, appDefinitionId, appActionId: 'aiMergeSummary' },
-    {
-      parameters: {
-        digest: buildDiffDigest(changes),
-        entryId,
-        entryPath,
-        sourceEnvironment: sourceEnv,
-        targetEnvironment: targetEnv,
-      },
-    }
-  );
-
-  const body = typeof call.response.body === 'string' ? JSON.parse(call.response.body) : call.response.body;
-  if (!body?.ok) throw new Error(body?.error || 'AI summary failed');
-  return body.summary;
+  return summarizeDigest(cma, appDefinitionId, spaceId, environmentId, entryId, entryPath, buildDiffDigest(changes), sourceEnv, targetEnv);
 }
