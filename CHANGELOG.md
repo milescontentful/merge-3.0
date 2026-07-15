@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.2.2] - 2026-07-14
+
+### 🐛 AI summary 403 fix
+
+- App Identity tokens are not authorized to invoke AI Actions (403 AccessDenied, actor: app-function) — the App Function now authenticates with the CMA token from the app's installation parameters, with App Identity as fallback
+- Function switched to a lightweight fetch-based CMA helper; error messages trimmed to status + reason
+
+---
+
 ## [3.2.1] - 2026-07-14
 
 ### 🐛 Live-diff fixes (found in first hands-on test)
