@@ -1,5 +1,16 @@
 # Changelog
 
+## [3.2.1] - 2026-07-14
+
+### 🐛 Live-diff fixes (found in first hands-on test)
+
+- **Changing environments in the merge preview now re-runs the analysis** — previously the diff table kept showing the result computed before the dialog opened (an original-codebase TODO)
+- **Merges execute against the environment picked in the dialog** — fixed a stale-state bug where the executor used the pre-dialog target
+- **Content-type copy re-detects against the final environments** on confirm
+- Clear empty-state message when source and target content is identical; Proceed is disabled while re-analyzing or when there's nothing to merge
+
+---
+
 ## [3.2.0] - 2026-07-14
 
 ### 🤖 Contentful-native AI summary

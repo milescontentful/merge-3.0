@@ -21,8 +21,8 @@ const Dialog = () => {
         entryTitle={entryTitle}
         environments={environments || []}
         missingContentTypes={missingContentTypes || []}
-        onConfirm={(resolutions, finalSourceEnv, finalTargetEnv, copyContentTypes) => {
-          sdk.close({ action: 'confirm', resolutions, sourceEnv: finalSourceEnv, targetEnv: finalTargetEnv, copyContentTypes });
+        onConfirm={(resolutions, finalSourceEnv, finalTargetEnv, copyContentTypes, finalChanges) => {
+          sdk.close({ action: 'confirm', resolutions, sourceEnv: finalSourceEnv, targetEnv: finalTargetEnv, copyContentTypes, changes: finalChanges });
         }}
         onCancel={() => {
           sdk.close();

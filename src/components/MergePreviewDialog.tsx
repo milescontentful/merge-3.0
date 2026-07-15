@@ -18,6 +18,8 @@ import { DialogAppSDK } from '@contentful/app-sdk';
 import { useContentfulClient } from '../hooks/useContentfulClient';
 import { buildBasicSummary, summarizeChanges } from '../services/aiSummarizer';
 import { ContentTypeMigrator } from '../services/contentTypeMigrator';
+import { DependencyResolver } from '../services/dependencyResolver';
+import { ConflictDetector } from '../services/conflictDetector';
 import { EnvironmentWithAlias, getEnvironmentsWithAliases } from '../utils/environmentHelpers';
 
 interface MissingContentType {
@@ -34,12 +36,12 @@ interface MergePreviewDialogProps {
   entryTitle: string;
   environments: EnvironmentWithAlias[];
   missingContentTypes: MissingContentType[];
-  onConfirm: (resolutions: FieldResolution[], sourceEnv?: string, targetEnv?: string, copyContentTypes?: boolean) => void;
+  onConfirm: (resolutions: FieldResolution[], sourceEnv?: string, targetEnv?: string, copyContentTypes?: boolean, changes?: ChangeItem[]) => void;
   onCancel: () => void;
 }
 
 export const MergePreviewDialog: React.FC<MergePreviewDialogProps> = ({
-  changes,
+  changes: initialChanges,
   sourceEnv: initialSourceEnv,
   targetEnv: initialTargetEnv,
   entryTitle,
@@ -73,6 +75,45 @@ export const MergePreviewDialog: React.FC<MergePreviewDialogProps> = ({
     }
   }, [initialEnvironments, cma, sdk.ids.space]);
   
+  // Track selected environments
+  const [sourceEnv, setSourceEnv] = useState(initialSourceEnv);
+  const [targetEnv, setTargetEnv] = useState(initialTargetEnv);
+
+  // The diff — re-computed when the user picks different environments
+  const [changes, setChanges] = useState<ChangeItem[]>(initialChanges);
+  const [reanalyzing, setReanalyzing] = useState(false);
+
+  useEffect(() => {
+    const entryId = parameters?.entryId as string | undefined;
+    if (!cma || !entryId) return;
+    // Initial analysis was done by the sidebar — only re-run on a real change
+    if (sourceEnv === initialSourceEnv && targetEnv === initialTargetEnv) return;
+    if (!sourceEnv || !targetEnv || sourceEnv === targetEnv || targetEnv === '__CREATE_NEW__') return;
+
+    let cancelled = false;
+    (async () => {
+      setReanalyzing(true);
+      setAiSummary(null); // stale summary no longer applies
+      try {
+        const resolver = new DependencyResolver(cma, sdk.ids.space, sourceEnv, 5);
+        const tree = await resolver.resolveEntryDependencies(entryId);
+        const items = resolver.flattenDependencies(tree);
+        const detector = new ConflictDetector(cma, sdk.ids.space, sourceEnv, targetEnv);
+        const detected = await detector.detectChanges(items);
+        if (!cancelled) setChanges(detected);
+      } catch (err: any) {
+        console.error('Re-analysis failed:', err);
+        if (!cancelled) sdk.notifier.error(`Re-analysis failed: ${err.message}`);
+      } finally {
+        if (!cancelled) setReanalyzing(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceEnv, targetEnv, cma]);
+
   const totalItems = changes.length;
   const creates = changes.filter(c => c.changeType === 'add');
   const updates = changes.filter(c => c.changeType === 'update');
@@ -109,10 +150,6 @@ export const MergePreviewDialog: React.FC<MergePreviewDialogProps> = ({
   const setResolution = (key: string, useSource: boolean) =>
     setFieldResolutions((prev) => new Map(prev).set(key, useSource));
 
-  // Track selected environments
-  const [sourceEnv, setSourceEnv] = useState(initialSourceEnv);
-  const [targetEnv, setTargetEnv] = useState(initialTargetEnv);
-  
   // Track missing content types (dynamically updated)
   const [missingContentTypes, setMissingContentTypes] = useState<MissingContentType[]>(initialMissingContentTypes);
   const [checkingContentTypes, setCheckingContentTypes] = useState(false);
@@ -528,13 +565,13 @@ export const MergePreviewDialog: React.FC<MergePreviewDialogProps> = ({
                 const sep = key.indexOf(':');
                 resolutions.push({ entryId: key.slice(0, sep), fieldName: key.slice(sep + 1), useSource });
               });
-              onConfirm(resolutions, sourceEnv, targetEnv, copyContentTypes);
+              onConfirm(resolutions, sourceEnv, targetEnv, copyContentTypes, changes);
             }}
             variant="positive"
             size="small"
-            isDisabled={!sourceEnv || !targetEnv || sourceEnv === targetEnv || creatingNewEnv || deletingEnv}
+            isDisabled={!sourceEnv || !targetEnv || sourceEnv === targetEnv || creatingNewEnv || deletingEnv || reanalyzing || changes.length === 0}
           >
-            Proceed with Merge
+            {reanalyzing ? 'Analyzing…' : 'Proceed with Merge'}
           </Button>
         </Flex>
       </Flex>
@@ -544,9 +581,20 @@ export const MergePreviewDialog: React.FC<MergePreviewDialogProps> = ({
         <Flex justifyContent="space-between" alignItems="flex-start" gap="spacingM">
           <Flex flexDirection="column" gap="spacingXs" style={{ flex: 1 }}>
             <Text fontWeight="fontWeightDemiBold" fontSize="fontSizeS">What's changing</Text>
-            <Text fontSize="fontSizeS">{aiSummary || buildBasicSummary(changes)}</Text>
+            {reanalyzing ? (
+              <Flex alignItems="center" gap="spacingXs">
+                <Spinner size="small" />
+                <Text fontSize="fontSizeS">Re-analyzing {sourceEnv} → {targetEnv}…</Text>
+              </Flex>
+            ) : totalItems === 0 ? (
+              <Text fontSize="fontSizeS">
+                Nothing to merge — source and target content is identical. Pick a different target environment above to see a diff.
+              </Text>
+            ) : (
+              <Text fontSize="fontSizeS">{aiSummary || buildBasicSummary(changes)}</Text>
+            )}
           </Flex>
-          {!aiSummary && (
+          {!aiSummary && !reanalyzing && totalItems > 0 && (
             <Button size="small" variant="secondary" onClick={handleSummarize} isDisabled={summarizing}>
               {summarizing ? 'Summarizing…' : '✨ Summarize with AI'}
             </Button>

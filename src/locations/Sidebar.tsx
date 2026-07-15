@@ -201,12 +201,18 @@ const Sidebar = () => {
         
         setViewState('merging');
         
-        // If user wants to copy content types, do that first
-        if (result.copyContentTypes && missingContentTypes.length > 0) {
-          sdk.notifier.success(`Copying ${missingContentTypes.length} content type(s)...`);
-          
+        // If user wants to copy content types, re-detect against the FINAL
+        // environments (the original list is stale if envs changed in the dialog)
+        const finalChangesForCts: ChangeItem[] = result.changes || detectedChanges;
+        if (result.copyContentTypes) {
           const ctMigrator = new ContentTypeMigrator(cma, sdk.ids.space, finalSourceEnv, finalTargetEnv);
-          const contentTypeIds = missingContentTypes.map(ct => ct.id);
+          const finalMissing = await ctMigrator.detectMissingContentTypes(
+            finalChangesForCts.filter((c) => c.type === 'Entry').map((c) => c.sourceData)
+          );
+          if (finalMissing.length > 0) {
+          sdk.notifier.success(`Copying ${finalMissing.length} content type(s)...`);
+          
+          const contentTypeIds = finalMissing.map(ct => ct.id);
           
           const copyResult = await ctMigrator.copyContentTypes(contentTypeIds);
           
@@ -217,9 +223,22 @@ const Sidebar = () => {
           }
           
           sdk.notifier.success(`Successfully copied ${copyResult.success.length} content type(s)!`);
+          }
         }
         
-        await executeMerge(detectedChanges, autoResolutions, result.resolutions || []);
+        // The dialog re-analyzes when environments change — prefer its diff
+        const finalChanges: ChangeItem[] = finalChangesForCts;
+        const finalResolutions: ConflictResolution[] = finalChanges
+          .filter((c) => c.hasConflict)
+          .map((c) => ({ id: c.id, action: 'overwrite' }));
+
+        if (finalChanges.length === 0) {
+          sdk.notifier.warning('Nothing to merge — source and target are identical');
+          setViewState('initial');
+          return;
+        }
+
+        await executeMerge(finalChanges, finalResolutions, result.resolutions || [], finalTargetEnv);
       } else {
         // User cancelled
         sdk.notifier.success('Merge cancelled');
@@ -246,9 +265,12 @@ const Sidebar = () => {
   const executeMerge = async (
     changesToMerge: ChangeItem[],
     resolutions: ConflictResolution[],
-    fieldResolutions: FieldResolution[] = []
+    fieldResolutions: FieldResolution[] = [],
+    targetEnvOverride?: string
   ) => {
-    if (!cma || !targetEnv) return;
+    // setTargetEnv() hasn't flushed yet when this runs — use the explicit value
+    const mergeTargetEnv = targetEnvOverride || targetEnv;
+    if (!cma || !mergeTargetEnv) return;
 
     setViewState('merging');
 
@@ -256,7 +278,7 @@ const Sidebar = () => {
       const executor = new MergeExecutor(
         cma,
         sdk.ids.space,
-        targetEnv,
+        mergeTargetEnv,
         false, // Always create as drafts - users can bulk publish in Contentful UI
         setProgress
       );
