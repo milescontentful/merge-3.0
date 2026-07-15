@@ -41,14 +41,11 @@ const ConfigScreen = () => {
 
     const currentState = await sdk.app.getCurrentState();
 
+    // Preserve existing per-content-type sidebar assignments.
+    // (Enabling the sidebar is done per content type in the Contentful UI.)
     const result = {
       parameters,
-      targetState: {
-        EditorInterface: {
-          ...currentState?.EditorInterface,
-          sidebar: { position: 0 },
-        },
-      },
+      targetState: currentState,
     };
 
     sdk.notifier.success('Configuration saved! You may need to refresh entry pages.');
@@ -121,6 +118,21 @@ const ConfigScreen = () => {
           <FormControl.HelpText>
             Content Management API token with read/write access to all
             environments. Keep this token secure.
+          </FormControl.HelpText>
+        </FormControl>
+
+        <FormControl>
+          <FormControl.Label>Anthropic API Key (optional)</FormControl.Label>
+          <TextInput
+            type="password"
+            value={parameters.anthropicApiKey || ''}
+            onChange={(e) =>
+              setParameters({ ...parameters, anthropicApiKey: e.target.value })
+            }
+          />
+          <FormControl.HelpText>
+            Enables the AI "what changed" summary in the merge preview. Leave
+            blank to use the built-in summary instead.
           </FormControl.HelpText>
         </FormControl>
 

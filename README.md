@@ -12,11 +12,13 @@ Everything runs client-side against the CMA (rate-limited to 18 req/s), using a 
 2. Diffs every item against the target environment (add vs. update)
 3. Detects content types missing in the target
 4. Opens a full-page preview: side-by-side FROM/TO field diff, environment pickers (with inline create/delete), and an option to copy missing content types
-5. On confirm: copies content types if requested, then merges assets first, entries second — with live progress
+5. Conflicting fields are click-to-resolve: choose per field whether the FROM value merges or the TO value is kept
+6. A "what's changing" summary sits above the diff — with an Anthropic API key configured, the ✨ AI summary explains the merge in plain English
+7. On confirm: copies content types if requested, then merges assets first, entries second — with live progress
 
 ### Merge Later (entry sidebar → "Merge Later")
 
-Adds the entry + its dependency IDs to a **merge queue** persisted in the app's installation parameters. The **Merge Queue page** (app Page location) lets you search/filter the queue, expand items to inspect and select dependencies, create/delete environments, and merge items individually or in bulk. Queue merges are additive only — anything already in the target is skipped, never overwritten.
+Adds the entry + its dependency IDs to a **merge queue** persisted in a dedicated `mergeQueueData` entry (auto-created, with optimistic locking so concurrent users can't clobber each other). The **Merge Queue page** (app Page location) lets you search/filter the queue, expand items to inspect and select dependencies, create/delete environments, and merge items individually or in bulk. Queue merges are additive only — anything already in the target is skipped, never overwritten.
 
 ## App locations
 
@@ -26,6 +28,14 @@ Adds the entry + its dependency IDs to a **merge queue** persisted in the app's 
 | Entry sidebar | `Sidebar` | View Diff (merge now) and Merge Later actions |
 | Dialog | `Dialog` → `MergePreviewDialog` | Full-page merge preview |
 | Page | `Page` | Merge queue management |
+
+## Quick install
+
+If the app definition already exists in your organization (ID `7sdD9OYisX97jP5HGPslFD`), install it into a space with the deeplink:
+
+**[→ Install Merge 3.0](https://app.contentful.com/deeplink?link=apps&id=7sdD9OYisX97jP5HGPslFD)**
+
+Then add your CMA token in the config screen and enable the sidebar per content type (see below).
 
 ## Setup
 
@@ -54,6 +64,7 @@ npm run upload
 
 1. **Settings → Apps → Custom Apps** → install/configure the app
 2. Enter your **CMA token** and (optionally) default source/target environments
+3. Optionally add an **Anthropic API key** to enable the AI merge summary
 
 ### ⚠️ Critical: enable the sidebar per content type
 
@@ -72,7 +83,7 @@ src/
   locations/     ConfigScreen, Sidebar, Dialog, Page (merge queue)
   components/    MergePreviewDialog, ProgressTracker, LocalhostWarning
   services/      dependencyResolver, conflictDetector, mergeExecutor,
-                 contentTypeMigrator, queueService
+                 contentTypeMigrator, queueService, aiSummarizer
   hooks/         useContentfulClient (CMA plain client)
   utils/         environmentHelpers (env + alias merging), rateLimiter
   types/         shared interfaces
@@ -80,6 +91,6 @@ src/
 
 ## Notes & limitations
 
-- The merge queue lives in app installation parameters — concurrent edits by multiple users can race.
-- Updates in "Merge Now" mode overwrite the target version (auto-resolved); queue mode never overwrites.
+- The merge queue is stored in a dedicated entry (content type `mergeQueueData`, auto-created on first use) with version-checked writes — concurrent edits by multiple users retry safely instead of overwriting each other.
+- Updates in "Merge Now" mode overwrite the target by default, but any conflicting field can be flipped to "keep target" in the preview.
 - No auto-publish, by design.

@@ -2,6 +2,7 @@ import { Entry, Asset, Link } from 'contentful-management';
 
 export interface AppInstallationParameters {
   cmaToken?: string;
+  anthropicApiKey?: string; // optional — enables the AI merge summary
   defaultSourceEnvironment?: string;
   defaultTargetEnvironment?: string;
   autoPublish?: boolean;
@@ -35,6 +36,14 @@ export interface ChangeItem {
   sourceData?: any;
   targetData?: any;
   changes?: FieldChange[];
+}
+
+// A per-field choice made in the merge preview: for a conflicting field,
+// use the source (FROM) value or keep the target (TO) value.
+export interface FieldResolution {
+  entryId: string;
+  fieldName: string;
+  useSource: boolean;
 }
 
 export interface ConflictResolution {

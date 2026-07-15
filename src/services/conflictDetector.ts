@@ -211,7 +211,7 @@ export class ConflictDetector {
 
       const title = this.extractTitle(sourceEntry);
 
-      const result = {
+      const result: ChangeItem = {
         id: entryId,
         type: 'Entry',
         changeType,

@@ -12,18 +12,13 @@ import {
   Checkbox,
   Spinner,
 } from '@contentful/f36-components';
-import { ChangeItem } from '../types';
+import { ChangeItem, FieldResolution } from '../types';
 import { useSDK } from '@contentful/react-apps-toolkit';
 import { DialogAppSDK } from '@contentful/app-sdk';
 import { useContentfulClient } from '../hooks/useContentfulClient';
+import { buildBasicSummary, summarizeChanges } from '../services/aiSummarizer';
 import { ContentTypeMigrator } from '../services/contentTypeMigrator';
 import { EnvironmentWithAlias, getEnvironmentsWithAliases } from '../utils/environmentHelpers';
-
-interface FieldResolution {
-  entryId: string;
-  fieldName: string;
-  useSource: boolean; // true = use FROM, false = use TO
-}
 
 interface MissingContentType {
   id: string;
@@ -82,6 +77,28 @@ export const MergePreviewDialog: React.FC<MergePreviewDialogProps> = ({
   const creates = changes.filter(c => c.changeType === 'add');
   const updates = changes.filter(c => c.changeType === 'update');
 
+  // AI "what changed" summary (optional — needs an Anthropic key in app config)
+  const anthropicApiKey: string | undefined = parameters?.anthropicApiKey;
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [summarizing, setSummarizing] = useState(false);
+  const handleSummarize = async () => {
+    if (!anthropicApiKey) return;
+    setSummarizing(true);
+    try {
+      setAiSummary(await summarizeChanges(anthropicApiKey, changes, sourceEnv, targetEnv));
+    } catch (err: any) {
+      console.error('AI summary failed:', err);
+      sdk.notifier.error(`AI summary failed: ${err.message}`);
+    } finally {
+      setSummarizing(false);
+    }
+  };
+
+  // Per-field conflict choices, keyed "entryId:fieldName". Default (absent) = use FROM.
+  const [fieldResolutions, setFieldResolutions] = useState<Map<string, boolean>>(new Map());
+  const setResolution = (key: string, useSource: boolean) =>
+    setFieldResolutions((prev) => new Map(prev).set(key, useSource));
+
   // Track selected environments
   const [sourceEnv, setSourceEnv] = useState(initialSourceEnv);
   const [targetEnv, setTargetEnv] = useState(initialTargetEnv);
@@ -129,7 +146,7 @@ export const MergePreviewDialog: React.FC<MergePreviewDialogProps> = ({
       }
       
       // Validate and sanitize: lowercase, no spaces, max 40 chars
-      const sanitizedId = newEnvId
+      const sanitizedId = String(newEnvId)
         .toLowerCase()
         .replace(/\s+/g, '-')
         .replace(/[^a-z0-9-]/g, '-')
@@ -150,11 +167,11 @@ export const MergePreviewDialog: React.FC<MergePreviewDialogProps> = ({
       
       
       // Add to environments list so it appears in dropdown
-      const newEnvironment = {
+      setEnvironments([...environments, {
         sys: { id: sanitizedId },
         name: sanitizedId,
-      };
-      environments.push(newEnvironment);
+        displayName: sanitizedId,
+      }]);
       
       sdk.notifier.success(`Environment "${sanitizedId}" created!`);
       
@@ -495,7 +512,14 @@ export const MergePreviewDialog: React.FC<MergePreviewDialogProps> = ({
             {deletingEnv ? 'Deleting...' : 'Delete Environment'}
           </Button>
           <Button 
-            onClick={() => onConfirm([], sourceEnv, targetEnv, copyContentTypes)}
+            onClick={() => {
+              const resolutions: FieldResolution[] = [];
+              fieldResolutions.forEach((useSource, key) => {
+                const sep = key.indexOf(':');
+                resolutions.push({ entryId: key.slice(0, sep), fieldName: key.slice(sep + 1), useSource });
+              });
+              onConfirm(resolutions, sourceEnv, targetEnv, copyContentTypes);
+            }}
             variant="positive"
             size="small"
             isDisabled={!sourceEnv || !targetEnv || sourceEnv === targetEnv || creatingNewEnv || deletingEnv}
@@ -504,6 +528,21 @@ export const MergePreviewDialog: React.FC<MergePreviewDialogProps> = ({
           </Button>
         </Flex>
       </Flex>
+
+      {/* Change Summary */}
+      <Note variant="neutral" style={{ marginBottom: '16px' }}>
+        <Flex justifyContent="space-between" alignItems="flex-start" gap="spacingM">
+          <Flex flexDirection="column" gap="spacingXs" style={{ flex: 1 }}>
+            <Text fontWeight="fontWeightDemiBold" fontSize="fontSizeS">What's changing</Text>
+            <Text fontSize="fontSizeS">{aiSummary || buildBasicSummary(changes)}</Text>
+          </Flex>
+          {anthropicApiKey && !aiSummary && (
+            <Button size="small" variant="secondary" onClick={handleSummarize} isDisabled={summarizing}>
+              {summarizing ? 'Summarizing…' : '✨ Summarize with AI'}
+            </Button>
+          )}
+        </Flex>
+      </Note>
 
       {/* Missing Content Types Warning */}
       {checkingContentTypes && (
@@ -614,6 +653,8 @@ export const MergePreviewDialog: React.FC<MergePreviewDialogProps> = ({
                     const targetValue = getFieldValue(targetField);
                     
                     const hasConflict = !isNew && JSON.stringify(sourceValue) !== JSON.stringify(targetValue);
+                    const resKey = `${item.id}:${fieldName}`;
+                    const useSource = fieldResolutions.get(resKey) ?? true; // default: FROM wins
 
                     return (
                       <Table.Row 
@@ -634,27 +675,45 @@ export const MergePreviewDialog: React.FC<MergePreviewDialogProps> = ({
                           </Flex>
                         </Table.Cell>
 
-                        {/* FROM Value */}
-                        <Table.Cell 
-                          style={{ 
+                        {/* FROM Value — on conflicts, click to make this side win */}
+                        <Table.Cell
+                          onClick={hasConflict ? () => setResolution(resKey, true) : undefined}
+                          style={{
                             borderLeft: '2px solid #2196f3',
-                            backgroundColor: hasConflict ? '#e3f2fd' : 'transparent',
+                            backgroundColor: hasConflict ? (useSource ? '#e3f2fd' : 'transparent') : 'transparent',
                             verticalAlign: 'top',
+                            cursor: hasConflict ? 'pointer' : 'default',
+                            outline: hasConflict && useSource ? '2px solid #2196f3' : 'none',
+                            outlineOffset: '-2px',
                           }}
                         >
+                          {hasConflict && (
+                            <Badge variant={useSource ? 'primary' : 'secondary'} size="small" style={{ marginBottom: '4px' }}>
+                              {useSource ? '✓ will merge' : 'click to use'}
+                            </Badge>
+                          )}
                           {renderValue(sourceValue, item.sourceData) || (
                             <Text fontSize="fontSizeS" fontColor="gray500">(empty)</Text>
                           )}
                         </Table.Cell>
 
-                        {/* TO Value */}
-                        <Table.Cell 
-                          style={{ 
+                        {/* TO Value — on conflicts, click to keep the target value */}
+                        <Table.Cell
+                          onClick={hasConflict ? () => setResolution(resKey, false) : undefined}
+                          style={{
                             borderLeft: '2px solid #ff9800',
-                            backgroundColor: targetValue ? 'transparent' : '#f7f9fa',
+                            backgroundColor: hasConflict ? (!useSource ? '#fff3e0' : 'transparent') : (targetValue ? 'transparent' : '#f7f9fa'),
                             verticalAlign: 'top',
+                            cursor: hasConflict ? 'pointer' : 'default',
+                            outline: hasConflict && !useSource ? '2px solid #ff9800' : 'none',
+                            outlineOffset: '-2px',
                           }}
                         >
+                          {hasConflict && (
+                            <Badge variant={!useSource ? 'warning' : 'secondary'} size="small" style={{ marginBottom: '4px' }}>
+                              {!useSource ? '✓ will keep' : 'click to keep'}
+                            </Badge>
+                          )}
                           {renderValue(targetValue, item.targetData) || (
                             <Text fontSize="fontSizeS" fontColor="gray500">(empty)</Text>
                           )}

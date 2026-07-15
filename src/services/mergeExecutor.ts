@@ -1,5 +1,5 @@
 import { PlainClientAPI } from 'contentful-management';
-import { ChangeItem, ConflictResolution, MergeProgress } from '../types';
+import { ChangeItem, ConflictResolution, FieldResolution, MergeProgress } from '../types';
 import { RateLimiter, retryWithBackoff } from '../utils/rateLimiter';
 
 export class MergeExecutor {
@@ -9,6 +9,8 @@ export class MergeExecutor {
   private autoPublish: boolean;
   private onProgress?: (progress: MergeProgress) => void;
   private rateLimiter: RateLimiter;
+  // entryId -> field names where the user chose to keep the TARGET value
+  private keepTargetFields: Map<string, Set<string>> = new Map();
 
   constructor(
     cma: PlainClientAPI,
@@ -31,8 +33,16 @@ export class MergeExecutor {
 
   async executeMerge(
     changes: ChangeItem[],
-    resolutions: ConflictResolution[]
+    resolutions: ConflictResolution[],
+    fieldResolutions: FieldResolution[] = []
   ): Promise<MergeProgress> {
+    // Index the per-field choices from the preview dialog
+    this.keepTargetFields = new Map();
+    for (const fr of fieldResolutions) {
+      if (fr.useSource) continue; // default behavior — source wins
+      if (!this.keepTargetFields.has(fr.entryId)) this.keepTargetFields.set(fr.entryId, new Set());
+      this.keepTargetFields.get(fr.entryId)!.add(fr.fieldName);
+    }
     
     const progress: MergeProgress = {
       total: changes.length,
@@ -231,9 +241,22 @@ export class MergeExecutor {
       
     } else if (change.changeType === 'update') {
       
-      // Update existing entry
+      // Update existing entry. Start from source fields, then restore any
+      // fields the user chose to keep from the target in the preview.
       const targetEntry = change.targetData;
-      
+      const keep = this.keepTargetFields.get(change.id);
+      let fields = sourceEntry.fields;
+      if (keep && keep.size > 0) {
+        fields = { ...sourceEntry.fields };
+        for (const fieldName of keep) {
+          if (targetEntry?.fields?.[fieldName] !== undefined) {
+            fields[fieldName] = targetEntry.fields[fieldName];
+          } else {
+            delete fields[fieldName]; // target had no value — keep it absent
+          }
+        }
+      }
+
       const updatedEntry = await this.rateLimiter.execute(() =>
         retryWithBackoff(
           () => this.cma.entry.update(
@@ -244,7 +267,7 @@ export class MergeExecutor {
             },
             {
               ...targetEntry,
-              fields: sourceEntry.fields,
+              fields,
             }
           ),
           {

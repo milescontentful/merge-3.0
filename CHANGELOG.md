@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.1.0] - 2026-07-14
+
+### ✨ Feature Release
+
+- **Per-field conflict resolution, for real this time** — conflicting fields in the merge preview are click-to-choose: FROM merges or TO is kept, applied field-by-field by the merge executor
+- **AI "what changed" summary** — optional Anthropic API key in app config; the preview dialog can summarize the diff in plain English (deterministic summary shown otherwise)
+- **Race-proof merge queue** — queue moved from installation parameters to a dedicated `mergeQueueData` entry with optimistic locking (version-conflict retry). Note: existing queued items in installation parameters are not migrated
+- **Zero TypeScript errors** — fixed all 16 pre-existing `tsc` errors
+- **Config screen fix** — `targetState` no longer writes a bogus "sidebar" content type assignment on save
+- **Quick-install deeplink** added to the README
+
+---
+
 ## [3.0.0] - 2026-07-14
 
 ### 🧹 The Big Cleanup

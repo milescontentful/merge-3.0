@@ -13,7 +13,7 @@ import {
 import { ChevronDownIcon } from '@contentful/f36-icons';
 import { SidebarAppSDK } from '@contentful/app-sdk';
 import { useSDK } from '@contentful/react-apps-toolkit';
-import { AppInstallationParameters, DependencyNode, ChangeItem, ConflictResolution, MergeProgress } from '../types';
+import { AppInstallationParameters, DependencyNode, ChangeItem, ConflictResolution, FieldResolution, MergeProgress } from '../types';
 import { useContentfulClient } from '../hooks/useContentfulClient';
 import { DependencyResolver } from '../services/dependencyResolver';
 import { ConflictDetector } from '../services/conflictDetector';
@@ -179,11 +179,12 @@ const Sidebar = () => {
           environments: environments, // Pass environments list
           missingContentTypes: missing, // Pass missing content types
           cmaToken: parameters?.cmaToken, // Pass CMA token for re-checking
+          anthropicApiKey: parameters?.anthropicApiKey, // For the AI summary
           entryTitle: sdk.entry.fields.internalName?.getValue()?.toString() || 
                       sdk.entry.fields.title?.getValue()?.toString() || 
                       sdk.entry.fields.name?.getValue()?.toString() || 
                       sdk.ids.entry,
-        },
+        } as any,
       });
       
 
@@ -218,7 +219,7 @@ const Sidebar = () => {
           sdk.notifier.success(`Successfully copied ${copyResult.success.length} content type(s)!`);
         }
         
-        await executeMerge(detectedChanges, autoResolutions);
+        await executeMerge(detectedChanges, autoResolutions, result.resolutions || []);
       } else {
         // User cancelled
         sdk.notifier.success('Merge cancelled');
@@ -244,7 +245,8 @@ const Sidebar = () => {
 
   const executeMerge = async (
     changesToMerge: ChangeItem[],
-    resolutions: ConflictResolution[]
+    resolutions: ConflictResolution[],
+    fieldResolutions: FieldResolution[] = []
   ) => {
     if (!cma || !targetEnv) return;
 
@@ -259,7 +261,7 @@ const Sidebar = () => {
         setProgress
       );
 
-      const finalProgress = await executor.executeMerge(changesToMerge, resolutions);
+      const finalProgress = await executor.executeMerge(changesToMerge, resolutions, fieldResolutions);
       setProgress(finalProgress);
       setViewState('complete');
 

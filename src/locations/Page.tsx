@@ -93,7 +93,7 @@ const Page = () => {
   }, [cma, sdk.ids.space]);
 
   // Use current environment for queue (queue is saved per environment)
-  const currentEnv = sdk.ids.environment || parameters?.sourceEnvironment;
+  const currentEnv = sdk.ids.environment || parameters?.defaultSourceEnvironment;
   
 
   useEffect(() => {
@@ -260,7 +260,7 @@ const Page = () => {
       
       if (skippedItems.length > 0) {
         const skippedTitles = skippedItems.map(s => s.title || s.id).slice(0, 5);
-        sdk.notifier.info(`Skipping ${skippedItems.length} item(s) that already exist in target`);
+        sdk.notifier.warning(`Skipping ${skippedItems.length} item(s) that already exist in target`);
       }
       
       if (changesToMerge.length === 0) {
@@ -462,7 +462,7 @@ const Page = () => {
       }
       
       // Validate and sanitize
-      const sanitizedId = newEnvId
+      const sanitizedId = String(newEnvId)
         .toLowerCase()
         .replace(/\s+/g, '-')
         .replace(/[^a-z0-9-]/g, '-')
@@ -697,7 +697,7 @@ const Page = () => {
           setExpandedRows(prev => new Set(prev).add(itemId));
           
           try {
-            const loadedDeps = [];
+            const loadedDeps: any[] = [];
             
             // Fetch dependencies one by one FROM SOURCE ENVIRONMENT
             for (const depId of item.dependencyIds) {
@@ -1015,7 +1015,7 @@ const Page = () => {
         setLoadingDependencies(prev => new Set(prev).add(item.id));
         
         try {
-          const dependencies = [];
+          const dependencies: any[] = [];
           
           // Fetch all dependency entries FROM SOURCE ENVIRONMENT
           for (const depId of item.dependencyIds) {
@@ -1153,7 +1153,7 @@ const Page = () => {
               <strong>SDK environment:</strong> {sdk.ids.environment || 'undefined'}
             </Text>
             <Text fontSize="fontSizeS" fontColor="gray700">
-              <strong>Config environment:</strong> {parameters?.sourceEnvironment || 'undefined'}
+              <strong>Config environment:</strong> {parameters?.defaultSourceEnvironment || 'undefined'}
             </Text>
             <Text fontSize="fontSizeM" marginTop="spacingS">
               <strong>To fix:</strong> Try accessing the queue from within a specific environment (e.g., go to Content in an environment, then click Apps → Merge 3.0)
@@ -1233,14 +1233,14 @@ const Page = () => {
       )}
 
       {error && (
-        <Note variant="negative" marginBottom="spacingL">
+        <Note variant="negative" style={{ marginBottom: '24px' }}>
           <Text>{error}</Text>
         </Note>
       )}
 
       {/* Merge Progress Display */}
       {mergingItem && mergeProgress && (
-        <Note variant="primary" marginBottom="spacingL">
+        <Note variant="primary" style={{ marginBottom: '24px' }}>
           <Stack spacing="spacingS">
             <Text fontWeight="fontWeightDemiBold">
               Merging: {mergingItem.entryTitle}

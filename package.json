@@ -1,8 +1,9 @@
 {
   "name": "contentful-entry-merge-app",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "private": true,
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.111.0",
     "@contentful/app-sdk": "^4.29.1",
     "@contentful/f36-components": "4.80.5",
     "@contentful/f36-tokens": "4.2.0",
